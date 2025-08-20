@@ -44,12 +44,27 @@ if st.button("Download NAV Data"):
     # --- Download all prices in bulk ---
     st.info("⏳ Downloading price data in bulk from Yahoo Finance...")
     tickers_all = list(set(fund_tickers + nav_tickers))
-    prices = yf.download(tickers_all, start=start_date, end=end_date, group_by="ticker")["Close"]
 
-    # Convert index to string dates for lookup
-    prices.index = prices.index.strftime("%Y-%m-%d")
+    prices = yf.download(
+        tickers_all,
+        start=start_date,
+        end=end_date,
+        auto_adjust=False,   # Explicit to avoid FutureWarning
+        group_by="ticker",
+        progress=False
+    )
 
-    if date_str not in prices.index:
+    # --- Normalize columns: handle single vs multi ticker ---
+    if isinstance(prices.columns, pd.MultiIndex):
+        close_prices = prices.xs("Close", axis=1, level=1)
+    else:
+        # If only one ticker was requested
+        close_prices = prices.to_frame(name=tickers_all[0]) if len(tickers_all) == 1 else prices
+
+    # Convert index to string dates
+    close_prices.index = close_prices.index.strftime("%Y-%m-%d")
+
+    if date_str not in close_prices.index:
         st.error(f"No data available for {date_str}. Try another date.")
         st.stop()
 
@@ -64,8 +79,8 @@ if st.button("Download NAV Data"):
         zip(fund_tickers, nav_tickers, fund_types, fund_subcats, fund_broadcats, fund_regions)
     ):
         # Prices
-        fund_price = prices.loc[date_str, fund] if fund in prices.columns else None
-        nav_price = prices.loc[date_str, nav] if nav in prices.columns else None
+        fund_price = close_prices.loc[date_str, fund] if fund in close_prices.columns else None
+        nav_price = close_prices.loc[date_str, nav] if nav in close_prices.columns else None
         discount = (fund_price / nav_price) if (fund_price and nav_price) else None
 
         # Fundamentals
@@ -76,7 +91,7 @@ if st.button("Download NAV Data"):
         shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else None
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
 
-        # Fund name (fall back to ticker)
+        # Fund name (fallback to ticker if not available)
         fund_name = getattr(fast_info, "longName", None) or fund
 
         rows.append([
@@ -117,3 +132,4 @@ if st.button("Download NAV Data"):
             file_name=excel_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
