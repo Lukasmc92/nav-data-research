@@ -1,4 +1,4 @@
-# nav_data_pull_streamlit_optimized.py
+# nav_data_pull_streamlit_final.py
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
@@ -9,7 +9,7 @@ from io import BytesIO
 
 # --- Page config ---
 st.set_page_config(page_title="NAV Data Pull", layout="wide")
-st.title("📊 Closed-End Fund Data Research (Optimized)")
+st.title("📊 Closed-End Fund Data Research (Optimized + Fundamentals)")
 
 # --- Download Tickers file ---
 TICKERS_URL = "https://github.com/Lukasmc92/NAV-Tickers/raw/refs/heads/main/Tickers.xlsx"
@@ -37,6 +37,15 @@ target_date = st.date_input(
 date_str = target_date.strftime('%Y-%m-%d')
 start_date = (target_date - timedelta(days=2)).strftime('%Y-%m-%d')
 end_date = (target_date + timedelta(days=2)).strftime('%Y-%m-%d')
+
+# --- Cache fundamentals lookup ---
+@st.cache_data
+def get_fundamentals(ticker: str) -> dict:
+    """Fetch fundamentals for a given ticker using yfinance.info"""
+    try:
+        return yf.Ticker(ticker).info
+    except Exception:
+        return {}
 
 # --- Run Button ---
 if st.button("Download NAV Data"):
@@ -68,7 +77,7 @@ if st.button("Download NAV Data"):
         st.error(f"No data available for {date_str}. Try another date.")
         st.stop()
 
-    # --- Batch get fundamentals ---
+    # --- Batch get fundamentals (with caching) ---
     st.info("⏳ Downloading fundamentals (shares/debt)...")
     tickers_obj = yf.Tickers(fund_tickers)
 
@@ -83,16 +92,17 @@ if st.button("Download NAV Data"):
         nav_price = close_prices.loc[date_str, nav] if nav in close_prices.columns else None
         discount = (fund_price / nav_price) if (fund_price and nav_price) else None
 
-        # Fundamentals
-        fast_info = tickers_obj.tickers[fund].fast_info
-        shares_outstanding = getattr(fast_info, "shares_outstanding", None)
-        total_debt = getattr(fast_info, "total_debt", None)
+        # Fund name (fast)
+        ticker_obj = tickers_obj.tickers[fund]
+        fund_name = getattr(ticker_obj.fast_info, "longName", None) or fund
+
+        # Shares & debt (slower, but cached)
+        info = get_fundamentals(fund)
+        shares_outstanding = info.get("sharesOutstanding")
+        total_debt = info.get("totalDebt")
 
         shares_millions = round(shares_outstanding / 1_000_000, 2) if shares_outstanding else None
         debt_millions = round(total_debt / 1_000_000, 2) if total_debt else None
-
-        # Fund name (fallback to ticker if not available)
-        fund_name = getattr(fast_info, "longName", None) or fund
 
         rows.append([
             fund_name, broadcats, types, subcategories, regions, date_str,
