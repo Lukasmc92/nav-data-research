@@ -104,7 +104,8 @@ if st.button("Download NAV Data"):
     # --- Build DataFrame ---
     df = pd.DataFrame(rows, columns=[
         "Fund Name", "Broad Category", "Fund Type", "Subcategory", "Geographic Focus", "Date",
-        "Fund Ticker", "Fund Close Price", "NAV Ticker", "NAV Close Price", "Discount"
+        "Fund Ticker", "Fund Close Price", "NAV Ticker", "NAV Close Price", "Discount",
+        "Shares Outstanding(M)", "Total Debt(M)"
     ])
 
     # --- Save to Excel ---
